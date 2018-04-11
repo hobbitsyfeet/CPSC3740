@@ -93,17 +93,23 @@
                       [(exp / exp) (/ $1 $3)]
                       [(exp ^ exp) (expt $1 $3)]
                       ;Start Relationals
-                      [(exp == exp) (equal? $1 $3)]
-                      [(exp <> exp) (not (equal? $1 $3))]
-                      [(exp >= exp) (or (> $1 $3) (equal? $1 $3))]
-                      [(exp <= exp) (or (< $1 $3) (equal? $1 $3))]
-                      [(exp < exp) (< $1 $3)]
-                      [(exp > exp) (> $1 $3)]
+                      [(exp == exp) (boolToInt (equal? $1 $3))]
+                      [(exp <> exp) (boolToInt (not (equal? $1 $3)))]
+                      [(exp >= exp) (boolToInt (or (> $1 $3) (equal? $1 $3)))]
+                      [(exp <= exp) (boolToInt (or (< $1 $3) (equal? $1 $3)))]
+                      [(exp < exp) (boolToInt (< $1 $3))]
+                      [(exp > exp) (boolToInt (> $1 $3))]
                       ;Negate number
                       [(- exp) (negNum negative) (- $2)]
                       ;evaluate within brackets
                       [(openBracket exp closeBracket) $2])]
           )
+  )
+(define (boolToInt input)
+  (cond
+    [(equal? input #t) 1]
+    [(equal? input #f) 0]
+  )
   )
 
 ;evaluates input and returns value of that evaluated input
