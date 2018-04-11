@@ -1,6 +1,7 @@
 #lang racket
-(require parser-tools/yacc parser-tools/lex
-         (prefix-in ~ parser-tools/lex-sre))
+(require parser-tools/yacc parser-tools/lex;for lexer and parser functions
+         (prefix-in ~ parser-tools/lex-sre);for arithmetic operators
+         )
 
 ;Global Variables
 (define quit "exit")
@@ -53,81 +54,70 @@
       (variDefined varName (+ index 3)));else go to the next variable name in the list
       )
 
-;Evaluate Expression
-(define (evaluate input)
-  (define splitLocation 0)
-  (define operation 0)
-  (define value 0)
-  (cond
-    [(foundCharacter input #\- 0)(set! splitLocation (stringSearch input #\- 0))]
-    [(foundCharacter input #\+ 0)(set! splitLocation (stringSearch input #\+ 0))]
-    [(foundCharacter input #\* 0)(set! splitLocation (stringSearch input #\* 0))]
-    [(foundCharacter input #\/ 0)(set! splitLocation (stringSearch input #\/ 0))]
-    [(foundCharacter input #\^ 0)(set! splitLocation (stringSearch input #\^ 0))]  
-    );end cond
-  (if (not(equal? splitLocation 0));if splitlovation is not 0
-      (set! operation (string-ref input splitLocation));set operation
-      (void))
-  ;(display "Set operation is now")
-  ;(display operation)
-  
-  (if (not(equal? splitLocation 0));if splitlovation is not 0
-      (evaluate (substring input 0 splitLocation));split left of the value ASSUME SPACES
-      (void))
-  (if (not(equal? splitLocation 0))
-      (evaluate (substring input (+ 1 splitLocation) (string-length input)));split right
-      (void))
-  
-  (display splitLocation)
-  (if (equal? splitLocation 0)
-      (cond
-        [(equal? #\+ operation)((+ (string->number (string-ref input (- splitLocation 1)) ) ((string->number (string-ref input (+ splitLocation 1)) ))))]
-        [else (void)]
-        )
-      (void))
-  );end Evaluate expression
+;Evaluate Expressions
+(define-tokens tokensToParse (number));tokens to parse is defined as a number
+(define-empty-tokens operators (openBracket closeBracket + - * / ^ == <> >= <= < > endFile negative)) ;define operators to use on numbers
 
-(define-tokens tokensToParse (number))
-(define-empty-tokens operators (openBracket closeBracket + - * / ^ endFile negative)) ; ob is opening bracket, cb is closing bracket
- 
+;lexstring lexifies arithmetic and relational operators
 (define lexString
   (lexer [(eof) 'endFile]
          [whitespace (lexString input-port)]
-         [(~or "+" "-" "*" "/" "^") (string->symbol lexeme)]
+         [(~or "+" "-" "*" "/" "^") (string->symbol lexeme)];charset complement of all OR'd Arithmetics
+         [(~or "==" "<>" ">=" "<=" ">" "<") (string->symbol lexeme)];charset complement of all OR'd Relationals
          ["(" 'openBracket ]
          [")" 'closeBracket]
-         [(~: (~+ numeric) (~? (~: #\. (~* numeric))))
-          (token-number (string->number lexeme))]
-         ))
- 
+         ;SRE Operators
+         ;character set complement match exactly one char to both forms of...
+         [(~:
+           (~+ numeric);repeated numeric
+           (~? ;the non occurence of...
+            (~: #\. (~* numeric)));charset complement of both char '.' and complement of repeated numeric sequence 0 or more times 
+           )
+          (token-number (string->number lexeme))];end SRE Operators
+         ));End define lexString
+ ;parseline parses the line and defines grammar, precedence and operations for lexified operators
 (define parseline
   (parser [start exp] [end endFile]
           [tokens tokensToParse operators]
           [error void]
-          [precs (left - +) (left * /) (left negative) (left ^)]
-          [grammar (exp [(number) $1]
+          [precs (left - +) (left * /) (left negative)
+                 (left ^) (left ==)
+                 (left >=) (left <=)
+                 (left <) (left >)
+                 (nonassoc <>)] ;precidence (left = left associative)
+          [grammar (exp [(number) $1] ;exp is a number
+                      ;Start Arithmetic
                       [(exp + exp) (+ $1 $3)]
                       [(exp - exp) (- $1 $3)]
                       [(exp * exp) (* $1 $3)]
                       [(exp / exp) (/ $1 $3)]
                       [(exp ^ exp) (expt $1 $3)]
+                      ;Start Relationals
+                      [(exp == exp) (equal? $1 $3)]
+                      [(exp <> exp) (not (equal? $1 $3))]
+                      [(exp >= exp) (or (> $1 $3) (equal? $1 $3))]
+                      [(exp <= exp) (or (< $1 $3) (equal? $1 $3))]
+                      [(exp < exp) (< $1 $3)]
+                      [(exp > exp) (> $1 $3)]
+                      ;Negate number
                       [(- exp) (negNum negative) (- $2)]
+                      ;evaluate within brackets
                       [(openBracket exp closeBracket) $2])]
           )
   )
- 
-(define (calc str)
-  (define i (open-input-string str))
-  (parseline (lambda() (lexString i))))
-;converts 
+
+;evaluates input and returns value of that evaluated input
+(define (evaluate input)
+  (define in (open-input-string input))
+  (parseline (lambda() (lexString in))))
+
+;Assigns a variable to given value
 (define (assignVari input index value)
-  (if(equal? (list-ref globalVariStack index) input)
-     (set! globalVariStack (list-set globalVariStack (+ index 2) value))
-     (assignVari input (+ index 3) value))
+  (if(equal? (list-ref globalVariStack index) input);if variable name is equal to var at index
+     (set! globalVariStack (list-set globalVariStack (+ index 2) value)) ;set the variable's value
+     (assignVari input (+ index 3) value));else search the next variable
   )
 
-;Do we want to have values passed in like so?
-;QUESTION? "functionName" "varName1 varValue1 varName2 varValue2"
 ;define function
 (define (defineFunction input)
   (define index 0)
@@ -136,11 +126,12 @@
         (append globalFuncStack
                 (list (substring input 0 index);Function name
                       (substring input (+ 1 index) (string-length input));variable type
-                      )
-                )
+                      );done list
+                );end append
         );done set function name
-  (write globalFuncStack)
+  (displayln globalFuncStack);displays the stack of all functions
   );END define function
+
 
 ;Search for character in a string
 (define (stringSearch input findChar index)
@@ -148,12 +139,6 @@
       index                                    ;return index position
       (stringSearch input findChar (+ index 1))) ;else iterate through
   )
-
-(define (rightmostbracket input index)
-  (if(equal? (string-ref input index) #\()
-     index
-     (rightmostbracket input (- index 1))
-  ))
 
 ;foundCharacter (same as stringSearch but returns true/false instead of position)
 (define (foundCharacter input findChar index)
@@ -163,6 +148,15 @@
     [else (foundCharacter input findChar (+ index 1))];keep searching
     )
    );end define foundCharacter
+
+;Iterates through a string and replaces all occurances of a variable with its value
+(define (replace input index)
+  ;(display input)
+  ;(display index)
+  (if(> index (- (length globalVariStack) 1))
+     input
+     (string-replace (replace input (+ index 3)) (list-ref globalVariStack index) (list-ref globalVariStack (+ index 2))))
+  )
 
 ;UofL 
 (define (UofL . x);creates a function without input
@@ -187,24 +181,32 @@
      (cond
        [(equal? (substring input 0 5) "input")(assignVari (substring input 6 (+ (stringSearch (substring input 6 (string-length input)) #\space 0) 6)) 0 (substring input (+ (stringSearch (substring input 6 (string-length input)) #\space 0) 6) (string-length input)))(set! test #f)];trust me, it works -Chris
        )
-     (void)
+     (void);else do nothing
      )
+  (if (equal? test #t)
   (cond
     [(equal? input "#clear") (ClearStacks)(set! test #f)];clears the memory ;COMPLETE
     [(equal? input "#exit")(set! quit #t)(set! test #f)];exits the program ;COMPLETE
-    ;[(not (equal? (string-ref input 0) #\#))(variDefined (substring input 0 (stringSearch input #\space 0)) 0)]
+    [(not(or (foundCharacter input #\= 0) (foundCharacter input #\# 0))) (displayln (evaluate input))(set! test #f)]
+    ;[(not (equal? (string-ref input 0) #\#))(variDefined (substring input 0 (stringSearch input #\space 0)) 0)(set! test #f)]
     ;[else (calc input )]
     );end cond
-  ;(set! test #f)
-  (if(equal? #t test)
-     (if(and (variDefined (substring input 0 (stringSearch input #\space 0)) 0) (equal? (string-ref input (+ (stringSearch input #\space 0) 1)) #\=))
-        ;(display (calc(substring input (+ (stringSearch input #\space 0) 3) (string-length input))))
-        (assignVari (substring input 0 (stringSearch input #\space 0)) 0 (calc(substring input (+ (stringSearch input #\space 0) 3) (string-length input))))
-        (void))
   (void))
-    
-
+  ;(set! test #f)
+  ;(if(equal? #t test)
+   ;  (set! input (string-append (substring input 0 (+(stringSearch input #\space 0)1)) (replace (substring input (+(stringSearch input #\space 0)1) (string-length input)) 0)))
+    ; (void))
+  ;(display input)
   
+  (if(equal? #t test)
+     ;replace all variables with their data
+      (if(and (variDefined (substring input 0 (stringSearch input #\space 0)) 0) (equal? (string-ref input (+ (stringSearch input #\space 0) 1)) #\=))
+        ;(display (calc(substring input (+ (stringSearch input #\space 0) 3) (string-length input))))
+        (assignVari (substring input 0 (stringSearch input #\space 0)) 0 (number->string (evaluate(substring input (+ (stringSearch input #\space 0) 3) (string-length input)))))
+        (void)
+        );end if and     
+     (void));end if equal?
+  ;(set! test #t)
   (if (equal? quit #t); if #exit, quit.
       (display "Quitting UofL")
      (UofL);recursivly enter UofL
