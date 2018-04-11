@@ -55,8 +55,14 @@
       )
 
 ;Evaluate Expressions
-(define-tokens tokensToParse (number));tokens to parse is defined as a number
-(define-empty-tokens operators (openBracket closeBracket + - * / ^ == <> >= <= < > endFile negative)) ;define operators to use on numbers
+;(define-tokens tokensToParse (number));tokens to parse is defined as a number
+;(define-empty-tokens operators (openBracket closeBracket + - * / ^ == <> >= <= < > endFile negative)) ;define operators to use on numbers
+
+(define-tokens tokensToParse (number var))
+(define-empty-tokens operators (openBracket closeBracket + - * / ^  == <> >= <= < > endFile negative)) ; ob is opening bracket, cb is closing bracket
+(define-lex-abbrevs
+  (identifier-characters (~or (char-range "A" "z")"?" "!" ":" "$" "%" "^" "&"))
+    (identifier (~+ identifier-characters)))
 
 ;lexstring lexifies arithmetic and relational operators
 (define lexString
@@ -73,9 +79,11 @@
            (~? ;the non occurence of...
             (~: #\. (~* numeric)));charset complement of both char '.' and complement of repeated numeric sequence 0 or more times 
            )
-          (token-number (string->number lexeme))];end SRE Operators
-         ));End define lexString
+         (token-number (string->number lexeme))]
+         (identifier (token-var lexeme));end SRE Operators
+        ));End define lexString
  ;parseline parses the line and defines grammar, precedence and operations for lexified operators
+
 (define parseline
   (parser [start exp] [end endFile]
           [tokens tokensToParse operators]
@@ -85,7 +93,7 @@
                  (left >=) (left <=)
                  (left <) (left >)
                  (nonassoc <>)] ;precidence (left = left associative)
-          [grammar (exp [(number) $1] ;exp is a number
+          [grammar (exp [(number) $1][(var) (getValue $1 0)] ;exp is a number
                       ;Start Arithmetic
                       [(exp + exp) (+ $1 $3)]
                       [(exp - exp) (- $1 $3)]
@@ -208,7 +216,7 @@
      ;replace all variables with their data
       (if(and (variDefined (substring input 0 (stringSearch input #\space 0)) 0) (equal? (string-ref input (+ (stringSearch input #\space 0) 1)) #\=))
         ;(display (calc(substring input (+ (stringSearch input #\space 0) 3) (string-length input))))
-        (assignVari (substring input 0 (stringSearch input #\space 0)) 0 (number->string (evaluate(substring input (+ (stringSearch input #\space 0) 3) (string-length input)))))
+        (assignVari (substring input 0 (stringSearch input #\space 0)) 0  (evaluate(substring input (+ (stringSearch input #\space 0) 3) (string-length input))))
         (void)
         );end if and     
      (void));end if equal?
