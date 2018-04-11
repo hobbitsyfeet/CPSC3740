@@ -1,5 +1,6 @@
 #lang racket
-(require parser-tools/lex)
+(require parser-tools/yacc parser-tools/lex
+         (prefix-in ~ parser-tools/lex-sre))
 
 ;Global Variables
 (define quit "exit")
@@ -56,12 +57,13 @@
 (define (evaluate input)
   (define splitLocation 0)
   (define operation 0)
+  (define value 0)
   (cond
-    [(foundCharacter input #\^ 0)(set! splitLocation (stringSearch input #\^ 0))]
-    [(foundCharacter input #\/ 0)(set! splitLocation (stringSearch input #\/ 0))]
-    [(foundCharacter input #\* 0)(set! splitLocation (stringSearch input #\* 0))]
-    [(foundCharacter input #\+ 0)(set! splitLocation (stringSearch input #\+ 0))]
     [(foundCharacter input #\- 0)(set! splitLocation (stringSearch input #\- 0))]
+    [(foundCharacter input #\+ 0)(set! splitLocation (stringSearch input #\+ 0))]
+    [(foundCharacter input #\* 0)(set! splitLocation (stringSearch input #\* 0))]
+    [(foundCharacter input #\/ 0)(set! splitLocation (stringSearch input #\/ 0))]
+    [(foundCharacter input #\^ 0)(set! splitLocation (stringSearch input #\^ 0))]  
     );end cond
   (if (not(equal? splitLocation 0));if splitlovation is not 0
       (set! operation (string-ref input splitLocation));set operation
@@ -70,15 +72,54 @@
   ;(display operation)
   
   (if (not(equal? splitLocation 0));if splitlovation is not 0
-      (evaluate (substring 0 (- 1 splitLocation)));split left of the value ASSUME SPACES
+      (evaluate (substring input 0 splitLocation));split left of the value ASSUME SPACES
       (void))
   (if (not(equal? splitLocation 0))
-      (evaluate (substring (+ 1 splitLocation) (string-length input)));split right
+      (evaluate (substring input (+ 1 splitLocation) (string-length input)));split right
       (void))
-      (string->number input);convert string value to integer value
   
+  (display splitLocation)
+  (if (equal? splitLocation 0)
+      (cond
+        [(equal? #\+ operation)((+ (string->number (string-ref input (- splitLocation 1)) ) ((string->number (string-ref input (+ splitLocation 1)) ))))]
+        [else (void)]
+        )
+      (void))
   );end Evaluate expression
 
+(define-tokens tokensToParse (number))
+(define-empty-tokens operators (openBracket closeBracket + - * / ^ endFile negative)) ; ob is opening bracket, cb is closing bracket
+ 
+(define lexString
+  (lexer [(eof) 'endFile]
+         [whitespace (lexString input-port)]
+         [(~or "+" "-" "*" "/" "^") (string->symbol lexeme)]
+         ["(" 'openBracket ]
+         [")" 'closeBracket]
+         [(~: (~+ numeric) (~? (~: #\. (~* numeric))))
+          (token-number (string->number lexeme))]
+         ))
+ 
+(define parseline
+  (parser [start exp] [end endFile]
+          [tokens tokensToParse operators]
+          [error void]
+          [precs (left - +) (left * /) (left negative) (left ^)]
+          [grammar (exp [(number) $1]
+                      [(exp + exp) (+ $1 $3)]
+                      [(exp - exp) (- $1 $3)]
+                      [(exp * exp) (* $1 $3)]
+                      [(exp / exp) (/ $1 $3)]
+                      [(exp ^ exp) (expt $1 $3)]
+                      [(- exp) (negNum negative) (- $2)]
+                      [(openBracket exp closeBracket) $2])]
+          )
+  )
+ 
+(define (calc str)
+  (define i (open-input-string str))
+  (parseline (lambda() (lexString i))))
+;converts 
 (define (assignVari input index value)
   (if(equal? (list-ref globalVariStack index) input)
      (set! globalVariStack (list-set globalVariStack (+ index 2) value))
@@ -138,25 +179,27 @@
      );end if
   (if(>(string-length input) 6)
      (cond ;then condition
-       [(equal? (substring input 0 6) "output")(display (getValue (substring input 7 (string-length input))0))(set! test #f)]
+       [(equal? (substring input 0 6) "output")(displayln (getValue (substring input 7 (string-length input))0))(set! test #f)]
        );end cond
      (void);else void
      );end if
   (if(>(string-length input) 5)
      (cond
-       [(equal? (substring input 0 5) "input")(assignVari (substring input 6 (+ (stringSearch (substring input 6 (string-length input)) #\space 0) 6)) 0 (substring input (+ (stringSearch (substring input 6 (string-length input)) #\space 0) 6) (string-length input)))];trust me, it works -Chris
+       [(equal? (substring input 0 5) "input")(assignVari (substring input 6 (+ (stringSearch (substring input 6 (string-length input)) #\space 0) 6)) 0 (substring input (+ (stringSearch (substring input 6 (string-length input)) #\space 0) 6) (string-length input)))(set! test #f)];trust me, it works -Chris
        )
      (void)
      )
   (cond
-    [(equal? input "#clear") (ClearStacks)];clears the memory ;COMPLETE
-    [(equal? input "#exit")(set! quit #t)];exits the program ;COMPLETE
+    [(equal? input "#clear") (ClearStacks)(set! test #f)];clears the memory ;COMPLETE
+    [(equal? input "#exit")(set! quit #t)(set! test #f)];exits the program ;COMPLETE
     ;[(not (equal? (string-ref input 0) #\#))(variDefined (substring input 0 (stringSearch input #\space 0)) 0)]
-    [else (evaluate input)]
+    ;[else (calc input )]
     );end cond
+  ;(set! test #f)
   (if(equal? #t test)
      (if(and (variDefined (substring input 0 (stringSearch input #\space 0)) 0) (equal? (string-ref input (+ (stringSearch input #\space 0) 1)) #\=))
-        (assignVari (substring input 0 (stringSearch input #\space 0)) 0 (substring input (+ (stringSearch input #\space 0) 3) (string-length input)))
+        ;(display (calc(substring input (+ (stringSearch input #\space 0) 3) (string-length input))))
+        (assignVari (substring input 0 (stringSearch input #\space 0)) 0 (calc(substring input (+ (stringSearch input #\space 0) 3) (string-length input))))
         (void))
   (void))
     
