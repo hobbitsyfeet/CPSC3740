@@ -13,6 +13,8 @@
   (set! globalVariStack '()) ;empties global variables
   )
 
+
+
 ;DefineVariable
 (define (defineVariable input)
   (cond
@@ -29,7 +31,7 @@
                    );end append to globalVari
            );end set
      (set! globalVariStack (append globalVariStack (list 0)));set value of variable to default as 0
-     (display globalVariStack)
+     ;(display globalVariStack)
      ];end else
     );end conditional
   );end define
@@ -47,7 +49,7 @@
 (define (variDefined varName index)
   (if (equal? varName (list-ref globalVariStack index));check if the current iterated variable name is right
       #t
-      #f);else go to the next variable name in the list
+      (variDefined varName (+ index 3)));else go to the next variable name in the list
       )
 
 ;Evaluate Expression
@@ -64,8 +66,8 @@
   (if (not(equal? splitLocation 0));if splitlovation is not 0
       (set! operation (string-ref input splitLocation));set operation
       (void))
-  (display "Set operation is now")
-  (display operation)
+  ;(display "Set operation is now")
+  ;(display operation)
   
   (if (not(equal? splitLocation 0));if splitlovation is not 0
       (evaluate (substring 0 (- 1 splitLocation)));split left of the value ASSUME SPACES
@@ -78,7 +80,6 @@
   );end Evaluate expression
 
 (define (assignVari input index value)
-  (display input)
   (if(equal? (list-ref globalVariStack index) input)
      (set! globalVariStack (list-set globalVariStack (+ index 2) value))
      (assignVari input (+ index 3) value))
@@ -124,19 +125,20 @@
 
 ;UofL 
 (define (UofL . x);creates a function without input
-(define input "") ;input
+  (define input "") ;input
+  (define test #t)
   (display "UofL>")
   (set! input (read-line));reads input
   (if(>(string-length input) 7)
      (cond ;then condition
-       [(equal? (substring input 0 8) "#definev")(defineVariable (substring input 12 (string-length input)))]
-       [(equal? (substring input 0 8) "#definef")(defineFunction (substring input 12 (string-length input)))]
+       [(equal? (substring input 0 8) "#definev")(defineVariable (substring input 12 (string-length input)))(set! test #f)]
+       [(equal? (substring input 0 8) "#definef")(defineFunction (substring input 12 (string-length input)))(set! test #f)]
        );end cond
      (void);else void
      );end if
   (if(>(string-length input) 6)
      (cond ;then condition
-       [(equal? (substring input 0 6) "output")(display (getValue (substring input 7 (string-length input))0))]
+       [(equal? (substring input 0 6) "output")(display (getValue (substring input 7 (string-length input))0))(set! test #f)]
        );end cond
      (void);else void
      );end if
@@ -149,9 +151,14 @@
   (cond
     [(equal? input "#clear") (ClearStacks)];clears the memory ;COMPLETE
     [(equal? input "#exit")(set! quit #t)];exits the program ;COMPLETE
-    ;[(variDefined input 0)(display (getValue input 0))]
+    ;[(not (equal? (string-ref input 0) #\#))(variDefined (substring input 0 (stringSearch input #\space 0)) 0)]
     [else (evaluate input)]
     );end cond
+  (if(equal? #t test)
+     (if(and (variDefined (substring input 0 (stringSearch input #\space 0)) 0) (equal? (string-ref input (+ (stringSearch input #\space 0) 1)) #\=))
+        (assignVari (substring input 0 (stringSearch input #\space 0)) 0 (substring input (+ (stringSearch input #\space 0) 3) (string-length input)))
+        (void))
+  (void))
     
 
   
